@@ -8,4 +8,4 @@ def get_all_bookid():
         next(book_infos)
         bids = set((book_info[1] for book_info in book_infos))
 
-    return sorted(bids)
+    return bids

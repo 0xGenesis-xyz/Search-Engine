@@ -2,234 +2,130 @@ import requests
 import re
 from bs4 import BeautifulSoup
 import os.path
-import bookid
 import pickle
+import urllib.parse
 import sqlite3
+import time
 
-finished = None
-c = None
+import bookid
 
-def get_image(url, bid):
-    r = requests.get(url)
-    path = os.path.join('.', 'img', bid + '.jpg')
-    with open(path, 'wb') as imgf:
-        imgf.write(r.content)
+class Crawler(object):
+    def __init__(self):
+        self.conn = sqlite3.connect('books.db')
+        self.c = self.conn.cursor()
+        self.bids = bookid.get_all_bookid()
+        self.finished_set = self.load_set()
+        self.unfinished_set = self.bids - self.finished_set
+        self.continuous_error_n = 0
 
-
-#def write_db(bid, url, title_text, authors_text, translators_text, subheading_text, publisher_text, publish_year_text, pages_number, price_text, binding_text, isbn_text, uniform_id_text, series_text, content_intro_text, author_intro_text, rate_value, rate_people_number, catalogue_text, tags_text):
-def write_db(*args):
-    global c
-    c.execute('''INSERT INTO books VALUES
-                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', args)
-
-
-def write_text(bid, *args):
-    path = os.path.join('.', 'text', bid + '.txt')
-    with open(path, 'w') as f:
-        f.write('\n'.join(args))
-
-
-def parse_book(bid):
-    url = 'http://book.douban.com/subject/{}/'.format(bid)
-
-    try:
-        r = requests.get(url)
-    except Exception as E:
-        with open('crawler.log', 'a') as f:
-            f.write('Error while crawling {}:\n'.format(url))
-            f.write(str(E))
-        return
-
-    try:
-        soup = BeautifulSoup(r.text)
-        # Image
-        img_url = soup.find('a', 'nbg').attrs['href']
-        get_image(img_url, bid)
-
-        # Title
-        title_text = soup.h1.span.string
-
-        # Author
-        authors = soup.find('span', text=' 作者')
-        if authors:
-            authors_text = ' '.join(c.string
-                                    for c in authors.parent.contents
-                                    if c.name == 'a')
-        else:
-            authors_text = ''
-
-        # Translator
-        translators = soup.find('span', text=' 译者')
-        if translators:
-            translators_text = ' '.join(c.string
-                                        for c in translators.parent.contents
-                                        if c.name == 'a')
-        else:
-            translators_text = ''
-
-        # Subheading
-        subheading = soup.find('span', text='副标题:')
-        if subheading:
-            subheading_text = subheading.next_sibling.strip()
-        else:
-            subheading_text = ''
-
-        # Publisher
-        publisher = soup.find('span', text='出版社:')
-        if publisher:
-            publisher_text = publisher.next_sibling.strip()
-        else:
-            publisher_text = ''
-
-        # Publish year
-        publish_year = soup.find('span', text='出版年:')
-        if publish_year:
-            publish_year_text = publish_year.next_sibling.strip()
-        else:
-            publish_year_text = ''
-
-        # Pages
-        pages = soup.find('span', text='页数:')
-        if pages:
-            pages_number = int(pages.next_sibling)
-        else:
-            pages_number = 0
-
-        # Price
-        price = soup.find('span', text='定价:')
-        if price:
-            price_text = price.next_sibling.strip()
-        else:
-            price_text = ''
-
-        # Binding
-        binding = soup.find('span', text='装帧:')
-        if binding:
-            binding_text = binding.next_sibling.strip()
-        else:
-            binding_text = ''
-
-        # ISBN
-        isbn = soup.find('span', text='ISBN:')
-        if isbn:
-            isbn_text = isbn.next_sibling.strip()
-        else:
-            isbn_text = ''
-
-        # Uniform id
-        uniform_id = soup.find('span', text='统一书号:')
-        if uniform_id:
-            uniform_id_text = uniform_id.next_sibling.strip()
-        else:
-            uniform_id_text = ''
-
-        # Series
-        series = soup.find('span', text='丛书:')
-        if series:
-            series_text = series.next_sibling.next_sibling.string
-        else:
-            series_text = ''
-
-        # Introduction
-        #    of contents
-        content_intro = soup.find('span', 'all hidden')
-        # 'all hidden' without an tail space represents for introduction to the book
-        if content_intro:
-            content_intro_text = '\n'.join((c.string for c in content_intro.find_all('p')))
-        else:
-            content_intro = soup.find('span', text='内容简介')
-            if content_intro:
-                content_intro = content_intro.find_next('div', 'intro')
-                content_intro_text = ''.join((c.string
-                                                for c in content_intro.find_all('p')
-                                                if c.string is not None))
-            else:
-                content_intro_text = ''
-
-        #    of author
-        author_intro = soup.find('span', 'all hidden ')
-        # 'all hidden' with an tail space represents for introduction to the author
-        if author_intro:
-            author_intro_text = ''.join((c.string for c in author_intro.find_all('p')))
-        else:
-            author_intro = soup.find('span', text='作者简介')
-            if author_intro:
-                author_intro = author_intro.find_next('div', 'intro')
-                author_intro_text = ''.join((c.string
-                                               for c in author_intro.find_all('p')
-                                               if c.string is not None))
-            else:
-                author_intro_text = ''
-
-        # Rating
-        rate = soup.find('strong', 'll rating_num ').string
+    def run(self):
         try:
-            rate_value = float(rate)
-        except ValueError:
-            rate_value = 0
+            for bid in self.unfinished_set:
+                self.parse_book_json(bid)
+                time.sleep(1.5)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.conn.commit()
+            self.conn.close()
+            self.save_set()
 
-        # Comment people number
-        rate_people = soup.find('a', href='collections').span
-        if rate_people:
-            rate_people_number = int(rate_people.string)
+    def load_set(self):
+        if os.path.exists('finished_set.pkl'):
+            with open('finished_set.pkl', 'rb') as f:
+                return pickle.load(f)
         else:
-            rate_people_number = 0
+            return set()
 
-        # Catalogue
-        catalogue = soup.find('div', id=re.compile(r'dir.*full'))
-        if catalogue:
-            catalogue_text = '\n'.join(map(lambda c: str(c).strip(),
-                                           catalogue.contents[:-3:2]))
-        else:
-            catalogue_text = ''
+    def save_set(self):
+        with open('finished_set.pkl', 'wb') as f:
+            pickle.dump(self.finished_set, f)
 
-        # Tags
-        tags = (c.string
-            for c in soup.find_all('a', ' tag'))
-        tags_text = ' '.join(tags)
+    def get_image(self, url, bid):
+        r = requests.get(url)
+        path = os.path.join('.', 'img', bid + '.jpg')
+        with open(path, 'wb') as imgf:
+            imgf.write(r.content)
 
-        write_db(bid, url, title_text, authors_text, translators_text, subheading_text, publisher_text, publish_year_text, pages_number, price_text, binding_text, isbn_text, uniform_id_text, series_text, content_intro_text, author_intro_text, rate_value, rate_people_number, catalogue_text, tags_text)
-        write_text(bid, title_text, authors_text, translators_text, subheading_text, publisher_text, isbn_text, series_text, content_intro_text, author_intro_text, catalogue_text, tags_text)
+    def parse_book_json(self, bid):
+        if bid in self.finished_set:
+            return
+        apikey = '040a8bb6cf4c9f230c1fa3246de5dd69'
+        api_url = 'https://api.douban.com/v2/book/{}?apikey={}'.format(bid, apikey)
 
-    except Exception as E:
-        with open('crawler.log', 'a') as f:
-            f.write('Error while crawling {}:\n'.format(url))
-            f.write(str(E))
-        return
+        try:
+            r = requests.get(api_url)
+            data = r.json()
+            url = 'http://book.douban.com/subject/{}/'.format(bid)
+            title = data.get('title', '')
+            subtitle = data.get('subtitle', '')
+            alt_title = data.get('alt_title', '')
+            author = ' '.join(data.get('author', '') or [])
+            translator = ' '.join(data.get('translator', []))
+            publisher = data.get('publisher', '')
+            pubdate = data.get('pubdate', '')
+            binding = data.get('binding', '')
+            summary = data.get('summary', '').replace('\n', '')
+            author_intro = data.get('author_intro', '').replace('\n', '')
+            catalog = data.get('catalog', '')
+            rating_b = data.get('rating', '')
+            if rating_b:
+                rating = float(rating_b['average'])
+                numRaters = int(rating_b['numRaters'])
+            else:
+                rating, numRaters = 0, 0
+            pages = data.get('pages', '')
+            price = data.get('price', '')
+            isbn13 = data.get('isbn13', '')
+            isbn10 = data.get('isbn10', '')
+            if isbn13:
+                isbn_query = '{}-{}-{}-{}-{}'.format(isbn13[0:3], isbn13[3], isbn13[4:8], isbn13[8:12], isbn13[12])
+            elif isbn10:
+                isbn_query = '{}-{}-{}-{}'.format(isbn10[0], isbn10[1:4], isbn10[4:9], isbn10[9])
+            else:
+                isbn_query = ''
+            zjulib_url = 'http://webpac.zju.edu.cn/F/-?' + urllib.parse.urlencode({"func": "find-b", "find_code": "ISB", "request": isbn_query, "local_base": "ZJU01"})
+            series = data.get('series', '')
+            if series:
+                series = series['title']
+            tags = data.get('tags', [])
+            tags = ' '.join((t['name'] for t in tags))
 
-    # print('标题：{}\n作者：{}\n译者：{}\n副标题：{}\n出版社：{}\n出版年：{}\n页数：{}\n定价：{}\n装帧：{}\nISBN：{}\n统一书号：{}\n丛书：{}\n内容简介：{}\n作者简介：{}\n评分：{}\n评价人数：{}\n目录：{}\n标签：{}\n-------------------------------------'.format(title_text, authors_text, translators_text, subheading_text, publisher_text, publish_year_text, pages_number, price_text, binding_text, isbn_text, uniform_id_text, series_text, content_intro_text, author_intro_text, rate_value, rate_people_number, catalogue_text, tags_text))
+            # Preserve data
+            self.write_db(bid, url, title, subtitle, alt_title, author, translator,
+                          publisher, pubdate, binding, summary, author_intro, catalog,
+                          rating, numRaters, pages, price, isbn13, isbn10, series, tags,
+                          zjulib_url)
+            self.write_text(bid, title, subtitle, alt_title, author, translator,
+                            publisher, summary, author_intro, catalog, isbn13, isbn10,
+                            series, tags)
+            # Image
+            img_url = data['image']
+            self.get_image(img_url, bid)
 
+            self.finished_set.add(bid)
+            self.continuous_error_n = 0
 
-def load_set():
-    if os.path.exists('finished_set.pkl'):
-        with open('finished_set.pkl', 'rb') as f:
-            return pickle.dump(f)
-    else:
-        return set()
+            # print('标题：{}\n作者：{}\n译者：{}\n副标题：{}\n出版社：{}\n出版年：{}\n页数：{}\n定价：{}\n装帧：{}\nISBN：{}\n统一书号：{}\n丛书：{}\n内容简介：{}\n作者简介：{}\n评分：{}\n评价人数：{}\n目录：{}\n标签：{}\n-------------------------------------'.format(title_text, authors_text, translators_text, subheading_text, publisher_text, publish_year_text, pages_number, price_text, binding_text, isbn_text, uniform_id_text, series_text, content_intro_text, author_intro_text, rate_value, rate_people_number, catalogue_text, tags_text))
+        except Exception as E:
+            with open('crawler.log', 'a') as f:
+                f.write('Error in {} : {}\n'.format(url, E))
+            self.continuous_error_n += 1
+            if self.continuous_error_n > 10:
+                raise RuntimeError('Try to relogin')
+            return
 
+    def write_db(self, *args):
+        self.c.execute('''INSERT INTO books VALUES
+                          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', args)
 
-def save_set():
-    with open('finished_set.pkl', 'wb') as f:
-        pickle.dump(finished)
-
-
-def main():
-    global c
-    conn = sqlite3.connect('books.db')
-    c = conn.cursor()
-    bids = bookid.get_all_bookid()
-    finished_set = load_set()
-    try:
-        for bid in bids:
-            parse_book(bid)
-            finished_set.add(bid)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        conn.commit()
-        conn.close()
+    def write_text(self, bid, *args):
+        path = os.path.join('.', 'text', bid + '.txt')
+        with open(path, 'w') as f:
+            f.write('\n'.join(args))
 
 
 if __name__ == '__main__':
-    main()
+    crawler = Crawler()
+    crawler.run()
