@@ -1,5 +1,8 @@
 import string
 import pickle
+from collections import defaultdict
+from functools import partial
+import os
 import os.path
 import jieba
 from nltk import stem
@@ -13,30 +16,45 @@ class Parser(object):
         self.unparsed_set = self.bids - self.parsed_set
         self.dictionary = self.load_dictionary()
 
-        chinese_punc = '！“”￥‘’（），—。、：；《》？【】…　'
+        chinese_punc = '！“”￥‘’（），—。、：；《》？【】…　·．／・―'
         self.delset = string.punctuation + string.whitespace + chinese_punc
 
-    def load_dictionary(self):
+    def run(self):
+        try:
+            for bid in self.unparsed_set:
+                self.parse(bid)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            self.save_dictionary(self.dictionary)
+            self.save_parsed_set(self.parsed_set)
+
+    @staticmethod
+    def load_dictionary():
         if os.path.exists('dictionary.pkl'):
             with open('dictionary.pkl', 'rb') as f:
                 return pickle.load(f)
         else:
-            return {}
+            # {term -> {bid -> frequency}}
+            return defaultdict(partial(defaultdict, int))
 
-    def load_parsed_set(self):
+    @staticmethod
+    def load_parsed_set():
         if os.path.exists('parsed_set.pkl'):
             with open('parsed_set.pkl', 'rb') as f:
                 return pickle.load(f)
         else:
             return set()
 
-    def save_dictionary(self):
+    @staticmethod
+    def save_dictionary(dictionary):
         with open('dictionary.pkl', 'wb') as f:
-            pickle.dump(self.dictionary, f)
+            pickle.dump(dictionary, f)
 
-    def save_parsed_set(self):
+    @staticmethod
+    def save_parsed_set(parsed_set):
         with open('parsed_set.pkl', 'wb') as f:
-            pickle.dump(self.dictionary, f)
+            pickle.dump(parsed_set, f)
 
     def parse(self, bid):
         if bid in self.parsed_set:
@@ -51,23 +69,44 @@ class Parser(object):
 
         for token in jieba.cut_for_search(text):
             if token in self.delset:
-                pass
+                continue
             if token.isalpha():
                 token = self.stemmer.stem(token)
-
-            if token not in self.dictionary:
-                self.dictionary[token] = {}
-            index = self.dictionary[token]
-            index[bid] = index.get(bid, 0) + 1
+            self.dictionary[token][bid] += 1
 
         self.parsed_set.add(bid)
 
-    def run(self):
+    def test_parse(self, path):
         try:
-            for bid in self.unparsed_set:
-                self.parse(bid)
-        except KeyboardInterrupt:
+            with open(path, 'r') as f:
+                text = f.read()
+        except FileNotFoundError as E:
             pass
-        finally:
-            self.save_dictionary()
-            self.save_parsed_set()
+
+        words = []
+        for token in jieba.cut_for_search(text):
+            if token in self.delset:
+                continue
+            if token.isalpha():
+                token = self.stemmer.stem(token)
+            words.append(token)
+        return ' '.join(words)
+
+    def test(self):
+        with open('test.txt', 'w') as out:
+            files = os.listdir('text')
+            for i, file_name in enumerate(files):
+                if i < 2:
+                    continue
+                if i > 5:
+                    break
+                bid = file_name[:-4]
+                self.parse(bid)
+                #s = self.test_parse(os.path.join('text', file_name))
+                #out.write(s + '\n')
+        print(self.dictionary)
+        self.save_dictionary(self.dictionary)
+
+if __name__ == '__main__':
+    parser = Parser()
+    parser.test()

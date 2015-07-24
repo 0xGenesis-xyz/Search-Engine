@@ -95,6 +95,9 @@ class Crawler(object):
             tags = data.get('tags', [])
             tags = ' '.join((t['name'] for t in tags))
 
+            # Image
+            img_url = data['image']
+            self.get_image(img_url, bid)
             # Preserve data
             self.write_db(bid, url, title, subtitle, alt_title, author, translator,
                           publisher, pubdate, binding, summary, author_intro, catalog,
@@ -103,9 +106,6 @@ class Crawler(object):
             self.write_text(bid, title, subtitle, alt_title, author, translator,
                             publisher, summary, author_intro, catalog, isbn13, isbn10,
                             series, tags)
-            # Image
-            img_url = data['image']
-            self.get_image(img_url, bid)
 
             self.finished_set.add(bid)
             self.continuous_error_n = 0
