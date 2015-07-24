@@ -35,7 +35,7 @@ def prepare():
     for word in d.keys():
         norm = [x+y*y for x, y in zip(norm, dic[word][1])]
     for word in d.keys():
-        dic[word] = (d[word][0], [x/y for x, y in zip(dic[word][1], norm)], idf[word])
+        dic[word] = (d[word][0], [x/math.sqrt(y) for x, y in zip(dic[word][1], norm)], idf[word])
     with open('data.pkl', 'wb') as pkl_file:
         pickle._dump(dic, pkl_file)
     mat = np.array([value[1] for value in dic.values()])

@@ -3,27 +3,29 @@ __author__ = 'Sylvanus'
 import pickle
 import scipy.io as sio
 
-class Init(object):
-    def __init__(self):
+#hashtable = None
+#similarity = None
+#scores = None
 
-        self.hashtable = None
-        self.similarity = None
-        self.scores = None
+def loadData():
+#    global hashtable
+#    global similarity
+    with open('data.pkl', 'rb') as pkl_file:
+        hashtable = pickle.load(pkl_file)
+    with open('similarity.pkl', 'rb') as pkl_file:
+        similarity = pickle.load(pkl_file)
+    print('hashtable:', hashtable)
+    return (hashtable, similarity)
 
-    def loadData(self):
-        with open('data.pkl', 'rb') as pkl_file:
-            self.hashtable = pickle.load(pkl_file)
-        with open('similarity.pkl', 'rb') as pkl_file:
-            self.similarity = pickle.load(pkl_file)
-
-    def login(self, uid):
-        data = sio.loadmat('data.mat')
-        user = 0
-        for id in data['userhashInv'][0]:
-            if id==uid:
-                break
-            user += 1
-        self.scores = data['pred'][user]
+def login(uid):
+    data = sio.loadmat('data.mat')
+    user = 0
+    for id in data['userhashInv'][0]:
+        if id==uid:
+            break
+        user += 1
+    scores = data['pred'][user]
+    return scores
 #    with open('score.txt', 'rb') as f:
 #        u = 0
 #        line = f.readline()

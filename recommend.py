@@ -1,7 +1,7 @@
 __author__ = 'Sylvanus'
 
-from init import similarity
-from init import scores
+#from init import similarity
+#from init import scores
 
 def recommend(bid):
     booklist = []

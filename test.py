@@ -6,11 +6,9 @@ import search
 
 pre.prepare()
 
-init.loadData()
-init.login(2297)
+(hashtable, similarity) = init.loadData()
+scores = init.login(2297)
 
-print('hashtable', init.hashtable)
-
-text = ['小说']
-booklist = search.doSearch(text)
-print(booklist)
+text = ['小说', '十字']
+booklist = search.doSearch(text, hashtable)
+print('list: ', booklist)
