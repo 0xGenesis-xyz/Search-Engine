@@ -52,13 +52,15 @@ class Parser(object):
         for token in jieba.cut_for_search(text):
             if token in self.delset:
                 pass
-            if token[0].isalpha():
+            if token.isalpha():
                 token = self.stemmer.stem(token)
 
             if token not in self.dictionary:
                 self.dictionary[token] = {}
             index = self.dictionary[token]
             index[bid] = index.get(bid, 0) + 1
+
+        self.parsed_set.add(bid)
 
     def run(self):
         try:

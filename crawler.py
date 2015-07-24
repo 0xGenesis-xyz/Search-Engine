@@ -1,6 +1,6 @@
 import requests
 import re
-from bs4 import BeautifulSoup
+#from bs4 import BeautifulSoup
 import os.path
 import pickle
 import urllib.parse
@@ -19,6 +19,7 @@ class Crawler(object):
         self.continuous_error_n = 0
 
     def run(self):
+        print("Crawling...")
         try:
             for bid in self.unfinished_set:
                 self.parse_book_json(bid)
@@ -54,9 +55,9 @@ class Crawler(object):
         api_url = 'https://api.douban.com/v2/book/{}?apikey={}'.format(bid, apikey)
 
         try:
+            url = 'http://book.douban.com/subject/{}/'.format(bid)
             r = requests.get(api_url)
             data = r.json()
-            url = 'http://book.douban.com/subject/{}/'.format(bid)
             title = data.get('title', '')
             subtitle = data.get('subtitle', '')
             alt_title = data.get('alt_title', '')
@@ -78,11 +79,14 @@ class Crawler(object):
             price = data.get('price', '')
             isbn13 = data.get('isbn13', '')
             isbn10 = data.get('isbn10', '')
-            if isbn13:
-                isbn_query = '{}-{}-{}-{}-{}'.format(isbn13[0:3], isbn13[3], isbn13[4:8], isbn13[8:12], isbn13[12])
-            elif isbn10:
-                isbn_query = '{}-{}-{}-{}'.format(isbn10[0], isbn10[1:4], isbn10[4:9], isbn10[9])
-            else:
+            try:
+                if isbn13:
+                    isbn_query = '{}-{}-{}-{}-{}'.format(isbn13[0:3], isbn13[3], isbn13[4:8], isbn13[8:12], isbn13[12])
+                elif isbn10:
+                    isbn_query = '{}-{}-{}-{}'.format(isbn10[0], isbn10[1:4], isbn10[4:9], isbn10[9])
+                else:
+                    isbn_query = ''
+            except IndexError:
                 isbn_query = ''
             zjulib_url = 'http://webpac.zju.edu.cn/F/-?' + urllib.parse.urlencode({"func": "find-b", "find_code": "ISB", "request": isbn_query, "local_base": "ZJU01"})
             series = data.get('series', '')
