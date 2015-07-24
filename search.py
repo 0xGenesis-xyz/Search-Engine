@@ -35,7 +35,9 @@ def makeMatrix(wordlist, indexlist):
 def queryWeight(wordlist, wordfre):
     weight = np.array(len(wordlist))
     i = 0
+    norm = 0
     for word in wordlist:
         weight[i] = (1 + math.log10(wordfre[word])) * hashtable[word][2]
+        norm += weight[i]
         i += 1
-    return weight
+    return [x/norm for x in weight]

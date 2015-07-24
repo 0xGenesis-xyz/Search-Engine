@@ -27,6 +27,11 @@ def prepare():
     dic = {}
     for word in d.keys():
         dic[word] = (d[word][0], list(map(lambda x: (1+math.log10(x))/idf[word], d[word][1])), idf[word])
+    norm = [0]*bookNum
+    for word in d.keys():
+        norm = [x+y*y for x, y in zip(norm, dic[word][1])]
+    for word in d.keys():
+        dic[word][1] = [x/y for x, y in zip(dic[word][1], norm)]
     with open('data.pkl', 'wb') as pkl_file:
         pickle._dump(dic, pkl_file)
     mat = np.array
