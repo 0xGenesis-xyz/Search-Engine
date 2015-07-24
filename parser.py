@@ -1,6 +1,8 @@
+"""Parse a document or a query. Return a inverted index."""
+
 import string
 import pickle
-from collections import defaultdict
+from collections import defaultdict, Counter
 from functools import partial
 import os
 import os.path
@@ -22,7 +24,7 @@ class Parser(object):
     def run(self):
         try:
             for bid in self.unparsed_set:
-                self.parse(bid)
+                self.parse_doc(bid)
         except KeyboardInterrupt:
             pass
         finally:
@@ -36,7 +38,7 @@ class Parser(object):
                 return pickle.load(f)
         else:
             # {term -> {bid -> frequency}}
-            return defaultdict(partial(defaultdict, int))
+            return defaultdict(Counter)
 
     @staticmethod
     def load_parsed_set():
@@ -56,7 +58,7 @@ class Parser(object):
         with open('parsed_set.pkl', 'wb') as f:
             pickle.dump(parsed_set, f)
 
-    def parse(self, bid):
+    def parse_doc(self, bid):
         if bid in self.parsed_set:
             return
         path = os.path.join('text', bid + '.txt')
@@ -75,6 +77,16 @@ class Parser(object):
             self.dictionary[token][bid] += 1
 
         self.parsed_set.add(bid)
+
+    def parse_query(self, query):
+        terms = Counter()
+        for token in jieba.cut_for_search(query):
+            if token in self.delset:
+                continue
+            if token.isalpha():
+                token = self.stemmer.stem(token)
+            terms[token] += 1
+        return terms
 
     def test_parse(self, path):
         try:
@@ -96,15 +108,16 @@ class Parser(object):
         with open('test.txt', 'w') as out:
             files = os.listdir('text')
             for i, file_name in enumerate(files):
-                if i < 2:
+                if i < 10:
                     continue
-                if i > 5:
+                if i > 13000:
                     break
+                if i % 500 == 0:
+                    print(i)
                 bid = file_name[:-4]
-                self.parse(bid)
+                self.parse_doc(bid)
                 #s = self.test_parse(os.path.join('text', file_name))
                 #out.write(s + '\n')
-        print(self.dictionary)
         self.save_dictionary(self.dictionary)
 
 if __name__ == '__main__':

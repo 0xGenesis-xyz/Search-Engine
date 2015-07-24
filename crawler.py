@@ -1,6 +1,7 @@
+"""Crawl data from douban.com."""
+
 import requests
 import re
-#from bs4 import BeautifulSoup
 import os.path
 import pickle
 import urllib.parse
@@ -114,6 +115,7 @@ class Crawler(object):
         except Exception as E:
             with open('crawler.log', 'a') as f:
                 f.write('Error in {} : {}\n'.format(url, E))
+            # checking whether current IP address is forbidden
             self.continuous_error_n += 1
             if self.continuous_error_n > 10:
                 raise RuntimeError('Try to relogin')
