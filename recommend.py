@@ -12,4 +12,4 @@ def recommend(bid):
     for book in booklist:
         scorelist.append((book, scores[book]))
     sorted(scorelist, key=lambda item: item[1])
-    return scorelist[:4]
+    return scorelist[:9]

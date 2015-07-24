@@ -1,13 +1,16 @@
 __author__ = 'Sylvanus'
 
-from init import hashtable
+from init import Init
 from collections import Counter
 import numpy as np
 import math
 
+ii = Init()
+
 def doSearch(text):
     wordfre = Counter(text)
     wordlist = list(wordfre.keys())
+    print(wordlist)
     indexlist = search(wordlist)
     Mweight = makeMatrix(wordlist, indexlist)
     Qweight = queryWeight(wordlist, wordfre)
@@ -17,7 +20,7 @@ def doSearch(text):
     return [i[0] for i in res]
 
 def search(wordlist):
-    indexlist = hashtable[wordlist[0]][0]
+    indexlist = ii.hashtable[wordlist[0]][0]
     for word in wordlist:
         indexlist = indexlist & hashtable[word][0]
     return indexlist
