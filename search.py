@@ -2,8 +2,26 @@ __author__ = 'Sylvanus'
 
 #from init import hashtable
 from collections import Counter
-import numpy as np
 import math
+import sqlite3
+
+import numpy as np
+from scipy import sparse
+from sklearn.preprocessing import normalize
+
+from matrix import Matrix
+
+class Search(object):
+    K = 10    # Only show K highest ranked results
+    def __init__(self):
+        self.matrix = Matrix()
+
+    def search(self, query):
+        conn = sqlite3.connect('books.db')
+        c = conn.cursor()
+        for bid in self.matrix.tiered_search(self, query):
+            with open('text/{}.txt'.format(bid), 'r') as f:
+                print(f.read(), end='\n\n')
 
 def doSearch(text, hashtable):
     wordfre = Counter(text)
