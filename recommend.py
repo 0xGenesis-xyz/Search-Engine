@@ -3,7 +3,7 @@ __author__ = 'Sylvanus'
 #from init import similarity
 #from init import scores
 
-def recommend(bid):
+def recommend(bid, similarity, scores):
     booklist = []
     for book in bid:
         for i in similarity[book]:
