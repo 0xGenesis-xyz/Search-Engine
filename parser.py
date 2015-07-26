@@ -2,13 +2,12 @@
 
 import string
 import pickle
-from collections import defaultdict, Counter
+from collections import Counter
 from functools import partial
 import os
 import os.path
 import jieba
 from nltk import stem
-import bookid
 
 class Parser(object):
     def __init__(self):

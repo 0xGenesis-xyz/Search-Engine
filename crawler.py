@@ -7,14 +7,13 @@ import pickle
 import urllib.parse
 import sqlite3
 import time
-
-import bookid
+import csv
 
 class Crawler(object):
     def __init__(self):
         self.conn = sqlite3.connect('books.db')
         self.c = self.conn.cursor()
-        self.bids = bookid.get_all_bookid()
+        self.bids = self.get_all_bookid()
         self.finished_set = self.load_set()
         self.unfinished_set = self.bids - self.finished_set
         self.continuous_error_n = 0
@@ -32,6 +31,22 @@ class Crawler(object):
             self.conn.commit()
             self.conn.close()
             self.save_set()
+
+    def get_all_bookid(self):
+        if os.path.exists('bidset.pkl'):
+            with open('bidset.pkl', 'rb') as f:
+                return pickle.load(f)
+
+        path = os.path.join('.', 'data', 'userbook.csv')
+        with open(path, 'r') as csvf:
+            book_infos = csv.reader(csvf)
+            next(book_infos)
+            bids = set((book_info[1] for book_info in book_infos))
+
+        with open('bidset.pkl', 'wb') as f:
+            pickle.dump(bids, f)
+
+        return bids
 
     def load_set(self):
         if os.path.exists('finished_set.pkl'):
