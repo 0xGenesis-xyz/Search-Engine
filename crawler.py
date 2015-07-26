@@ -24,7 +24,8 @@ class Crawler(object):
         try:
             for bid in self.unfinished_set:
                 self.parse_book_json(bid)
-                time.sleep(1.5)
+                time.sleep(1.51)
+            print('Finished')
         except KeyboardInterrupt:
             pass
         finally:
@@ -59,6 +60,8 @@ class Crawler(object):
             url = 'http://book.douban.com/subject/{}/'.format(bid)
             r = requests.get(api_url)
             data = r.json()
+            if data.get('msg', '') == 'book_not_found':
+                raise RuntimeError('Book not found')
             title = data.get('title', '')
             subtitle = data.get('subtitle', '')
             alt_title = data.get('alt_title', '')
@@ -97,7 +100,9 @@ class Crawler(object):
             tags = ' '.join((t['name'] for t in tags))
 
             # Image
-            img_url = data['image']
+            img_url = data.get('image')
+            if not img_url:
+                raise RuntimeError('Image not found')
             self.get_image(img_url, bid)
             # Preserve data
             self.write_db(bid, url, title, subtitle, alt_title, author, translator,
@@ -109,16 +114,16 @@ class Crawler(object):
                             series, tags)
 
             self.finished_set.add(bid)
-            self.continuous_error_n = 0
+            #self.continuous_error_n = 0
 
             # print('标题：{}\n作者：{}\n译者：{}\n副标题：{}\n出版社：{}\n出版年：{}\n页数：{}\n定价：{}\n装帧：{}\nISBN：{}\n统一书号：{}\n丛书：{}\n内容简介：{}\n作者简介：{}\n评分：{}\n评价人数：{}\n目录：{}\n标签：{}\n-------------------------------------'.format(title_text, authors_text, translators_text, subheading_text, publisher_text, publish_year_text, pages_number, price_text, binding_text, isbn_text, uniform_id_text, series_text, content_intro_text, author_intro_text, rate_value, rate_people_number, catalogue_text, tags_text))
         except Exception as E:
             with open('crawler.log', 'a') as f:
                 f.write('Error in {} : {}\n'.format(url, E))
             # checking whether current IP address is forbidden
-            self.continuous_error_n += 1
-            if self.continuous_error_n > 10:
-                raise RuntimeError('Try to relogin')
+            #self.continuous_error_n += 1
+            #if self.continuous_error_n > 10:
+            #    raise RuntimeError('Try to relogin')
             return
 
     def write_db(self, *args):
