@@ -3,6 +3,7 @@
 from collections import defaultdict, Counter
 import heapq
 from functools import reduce, wraps
+import itertools
 import os.path
 import pickle
 import sqlite3
@@ -64,7 +65,6 @@ class Matrix(object):
                 return pickle.load(f)
 
         dictionary = defaultdict(Counter)    # {term -> {bid -> frequency}}
-        count = 0
         for bid in self.bids:
             path = os.path.join('text', bid + '.txt')
             try:
@@ -77,10 +77,6 @@ class Matrix(object):
             for token in self.parser.parse(text):
                 dictionary[token][bid] += 1
 
-            count += 1
-            if count % 10000 == 0:
-                print(count)
-
         return dictionary
 
     @processing('load')
@@ -92,21 +88,18 @@ class Matrix(object):
         higher_tier_dictionary = defaultdict(Counter)
         conn = sqlite3.connect('books.db')
         c = conn.cursor()
-        c.execute('SELECT bid, title FROM books')
-        count = 0
+        c.execute('SELECT bid, title, author, tags FROM books')
         while True:
             record = c.fetchone()
             if record:
-                bid, title = record
-                for token in self.parser.parse(title):
+                bid, title, author, tags = record
+                text = '{} {} {}'.format(title, author, tags)
+                for token in self.parser.parse(text):
                     higher_tier_dictionary[token][str(bid)] += 1
             else:
                 break
-
-            count += 1
-            if count % 10000 == 0:
-                print(count)
         conn.close()
+
         return higher_tier_dictionary
 
     @processing('load')
@@ -139,7 +132,7 @@ class Matrix(object):
 
     def _dict_to_matrix(self, dictionary):
         """Get term/bid matrix."""
-        m = sparse.dok_matrix((len(self.term_to_row), len(self.bid_to_col)), dtype=int)
+        m = sparse.dok_matrix((self.M, self.N), dtype=int)
         for term, bids in dictionary.items():
             row = self.term_to_row[term]
             for bid, freq in bids.items():
@@ -217,15 +210,24 @@ class Matrix(object):
 
         # Higher tier
         try:
-            res = list(self.cos_sim_search(query_terms, tier=1))
-        except KeyError:    # Terms don't occur in titles, continue to search the lower tier
-            res = ()
-        if len(res) < K:    # Lower tier
+            hres = heapq.nlargest(K, self.cos_sim_search(query_terms, tier=1))
+        except KeyError:
+            hres = []
+        except ZeroDivisionError:    # Terms don't occur in titles, continue to search the lower tier
+            hres = []
+        lres = []
+        if len(hres) < K:    # Lower tier
             try:
-                res = list(self.cos_sim_search(query_terms, tier=0))
-            except KeyError:    # Term don't occur in all docs, return nothing
+                hres_bids = [r[1] for r in hres]
+                # Docs that hasn't been retrieve
+                lres = heapq.nlargest(K - len(hres),    # Find at most K docs
+                                      filter(lambda pair: pair[0] not in hres_bids,
+                                             self.cos_sim_search(query_terms, tier=0)))
+            except KeyError:
                 return ()
-        return (int(r[1]) for r in heapq.nlargest(K, res))    # Return K highest ranked bids
+            except ZeroDivisionError:    # Term don't occur in all docs, return nothing
+                return ()
+        return (int(r[1]) for r in itertools.chain(hres, lres))    # Return K highest ranked bids
 
     def cos_sim_search(self, query_terms, tier=0):
         """Return an unsorted iterator of (similarity, bid) tuples given the query terms.
