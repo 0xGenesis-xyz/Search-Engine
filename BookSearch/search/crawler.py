@@ -37,7 +37,7 @@ class Crawler(object):
             with open('bidset.pkl', 'rb') as f:
                 return pickle.load(f)
 
-        path = os.path.join('.', 'data', 'userbook.csv')
+        path = os.path.join('..', 'data', 'userbook.csv')
         with open(path, 'r') as csvf:
             book_infos = csv.reader(csvf)
             next(book_infos)

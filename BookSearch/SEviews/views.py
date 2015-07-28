@@ -18,21 +18,26 @@ def SE_Recom(bid):
     return list(m.find_most_similar(bid))
 
 #对简介长度进行裁剪
-def summary_cut(book_list):
-    summary_len = 110
+def summary_cut(book_list, summary_len=110):
     for book in book_list:
-        if len(book.summary)>=summary_len:
-            book.summary=book.summary[:summary_len-3]+"..."
-        book.tags = book.tags.split(" ")
+        if book.summary.split()[0].isalpha():
+            if len(book.summary)>=summary_len * 2:
+                book.summary=book.summary[:summary_len * 2 - 3]+"..."
+        else:
+            if len(book.summary)>=summary_len:
+                book.summary=book.summary[:summary_len - 3]+"..."
+        book.tags = book.tags.split()
     #return book_list
 
 #对推荐书目过长标题进行裁剪
-def title_cut(book_list):
-    title_len = 12
+def title_cut(book_list, title_len=10):
     for book in book_list:
-        if len(book.title)>=title_len:
-            book.title=book.title[:title_len-3]+"..."
-    #return book_list
+        if all((word.isalpha() or word.isdigit() for word in book.title.split())):
+            if len(book.title)>=title_len * 2:
+                book.title=book.title[:title_len*2-3]+"..."
+        else:
+            if len(book.title)>=title_len:
+                book.title=book.title[:title_len-3]+"..."
 
 #响应搜索请求主要函数
 def result(request):
@@ -49,8 +54,7 @@ def result(request):
     #结果搜寻
     else:
         posts_list = SE_Result(wd)                   #处理数据并返回列表
-        first_res = posts_list[0]
-        recom_list = SE_Recom(first_res)                    #获取推荐书表
+        recom_list = SE_Recom(posts_list[:5])                    #获取推荐书表
         page_size=6                                      #每页显示条目
         paginator = Paginator(posts_list, page_size)     #页码器
         try:
@@ -63,9 +67,10 @@ def result(request):
         endPos   = startPos + page_size
         #读取搜索结果
         if posts_list:
-            for id in posts_list:
+            for id in posts_list[startPos:endPos]:
                 book = Books.objects.filter(bid=id)
                 if len(book)>=1:
+                    book[0].img_url = 'img/{}.jpg'.format(book[0].bid)
                     posts.append(book[0])
             none = 0
         #读取推荐书目
@@ -74,14 +79,20 @@ def result(request):
         for re in recom_list:
             book = Books.objects.filter(bid=re)
             if len(book)>=1:
+                book[0].img_url = 'img/{}.jpg'.format(book[0].bid)
                 recoms.append(book[0])
         title_cut(recoms)
         summary_cut(posts)
         title = wd + " _SynJauNeng"                         #标题
         return render_to_response( 'res.html',
-        {'name':title,'wd':wd,'none':none,
-         'posts':posts,'pages':bids,
-         'recoms':recoms,'pid':page})          #字典传递变量
+        {'name':title,
+         'wd':wd,
+         'none':none,
+         'posts':posts,
+         'pages':bids,
+         'recoms':recoms,
+         'pid':page,
+         'items': len(posts_list)})          #字典传递变量
 
 def index(request):
     return render(request, 'index.html')

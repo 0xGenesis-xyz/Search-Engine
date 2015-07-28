@@ -1,0 +1,95 @@
+﻿{%  load staticfiles %}
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<title>SE - For Book Searching</title>
+<link rel="stylesheet" href="{% static "css/common.css"%}"/>
+<script src="是http://www.5imoban.net/download/jquery/jquery-1.8.3.min.js"></script>
+<style>#wimoban_p,#wimoban_p a{color:#fff; font-family:"微软雅黑";}
+#wimoban_p{text-align:center; font-size:14px; clear:both;}
+</style>
+</head>	
+<body oncontextmenu='return false' ondragstart='return false'>
+<div id="wrapper">
+	<div class="skinBg" style="background-image: url('{%  static "images/23_top.jpg"%}');"></div>
+	<header id="header">
+		<div class="weather fr">
+			<span class="cityW">
+				<span>版本号：</span>
+				<span>
+					<span>3.0</span>
+				</span>
+			</span>
+			<span class="sp">|</span>
+			<span class="pollution">
+				<span>Editor</span>
+				<span class="polutionLevel">GROUP 13</span>
+			</span>
+			<div class="cityWeather">
+				
+			</div>
+		</div>
+	</header>
+		
+	<div class="content tc">
+		<p class="logo"><img width="430" height="121" src="{% static "images/logo_white.png" %}" alt="logo" /></p>
+		<div class="searchBox">
+			<form action="/result/">
+				<input type="text" class="searchIpt f14" name="wd" maxlength="100" autocomplete="off"/>
+				<input type="submit" class="btn cp" value="Search" id="1001"/>
+			</form>
+		</div>
+	</div>
+</div>
+<script src="{% static "js/jquery.min.js"%}"></script>
+<script src="{% static "js/jquery.autocomplete.min.js"%}"></script>
+<script>
+	$('.uname,.topMenus').hover(function(){
+		$('.topMenus').stop(true,true).fadeIn(200);
+	},function(){
+		$('.topMenus').stop(true,true).delay(500).fadeOut(200);
+	});
+	
+	//搜索框自动补全; 
+	$('.searchIpt').AutoComplete({
+		'data': ['About Me', '审美网', 'abcdefg', 'One', 'Two', 'Three', 'Four', 'Five', 'Six','smwell.com', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'],
+		'itemHeight': 24,
+		'width': 529
+	}).AutoComplete('show');
+		
+	$('.ctnerTab a').click(function(){
+		if(!$(this).hasClass('on')){
+			$('.ctnerTab a').removeClass('on').eq($(this).index()).addClass('on');
+			$('.rtNavs').stop(true,true).hide(200).eq($(this).index()).show(300);
+		}
+	});
+	
+	$('.menusWrapper a').click(function(){
+		if(!$(this).hasClass('active')){
+			$('.menusWrapper a').removeClass('active').eq($(this).index()).addClass('active');
+			$('.cbox').stop(true,true).animate({top:318},100).hide().eq($(this).index()).animate({top:0},400).show();
+		}
+	});
+	
+	$('.smallPics a').click(function(){
+		if(!$(this).hasClass('active')){
+			$('.smallPics a').removeClass('active').eq($(this).index()).addClass('active');
+			$('.picLink').stop(true,true).removeClass('active').eq($(this).index()).addClass('active');
+		}
+	});
+			
+	$('.titleT').hover(function(){
+		if(!$(this).hasClass('on')){
+			$('.titleT').removeClass('on').eq($(this).index()).addClass('on');
+			$('.topicB').stop(true,true).hide().eq($(this).index()).show();
+		}
+	});
+</script>
+		<br></br>
+<div id="wimoban_p">
+    <span class="ft_cpy">&copy;copyrights @ 2015 Search Engine Website in Django.<br /><font color="#F88F05">&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; Powered by </font>GROUP 13</span>
+</div>
+<!-- 代码结束 -->
+</body>
+</html>
