@@ -20,6 +20,7 @@ sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 from parser import Parser
 from crawler import Crawler
 """
+
 from search.parser import Parser
 from search.crawler import Crawler
 
@@ -204,12 +205,13 @@ class Matrix(object):
     def tf(self, freq):
         return 1 + np.log10(freq)
 
-    def idf(self, term, tier):
-        dictionary = self.dicts[tier]
-        if dictionary.get(term):
-            return np.log10(self.N / len(dictionary[term]))
-        else:
-            return 0
+    def idf(self, term, tier=0):
+        matrix = self.mats_csr[tier]
+        def df(term):
+            row_num = self.term_to_row[term]
+            row = matrix.getrow(row_num)
+            return row.nnz
+        return np.log10(self.N / df(term))
 
     def make_query_vector(self, query_terms, tier):
         """Generator a query tf-idf vector according to terms counter.
@@ -269,5 +271,62 @@ class Matrix(object):
         cos_sims = qv.dot(m).toarray()[0]
         return zip(cos_sims, bids)
 
+    def find_most_similar(self, bid, K_sim=10):
+        """Return the bid of the most similar book to parameter bid except the given bid."""
+        col_num = self.bid_to_col.get(str(bid))
+        if col_num is None:
+            return ()
+        termv = self.term_bid_matrix.getcol(col_num)
+        termva = termv.toarray()    # Generate a vector for terms
+        stop_words_removed = np.logical_and(termva, self.stop_words)
+        nonzero = stop_words_removed.nonzero()[0]    # Nonzero indices
+        rest_term_rows = self.term_bid_matrix_csr[nonzero]
+        docs = np.zeros(self.N, dtype=bool)
+        for row in rest_term_rows:
+            np.logical_or(docs, row.toarray()[0], docs)
+        cols = docs.nonzero()[0]
+        matched_matrix = self.term_bid_matrix[:,cols]
+        termv.data = self.tf(termv.data) * np.array([self.idf(self.row_to_term[row])
+                                                     for row in termv.indices])
+        termv = normalize(termv.T, axis=1, copy=False)
+        matched_matrix.data = self.tf(matched_matrix.data)
+        matched_matrix = normalize(matched_matrix.T, axis=1, copy=False).T
+        cos_sims = termv.dot(matched_matrix).toarray()[0]
+        bids = (self.col_to_bid[col] for col in cols)
+        return (int(r[1])
+                for r in heapq.nlargest(K_sim, zip(cos_sims, bids))
+                if bid != r[1])
+
+    def find_most_similar_tags(self, bid, K_sim=10):
+        conn = sqlite3.connect('books.db')
+        c = conn.cursor()
+        c.execute('SELECT tags FROM books WHERE bid = ?', (int(bid),))
+        query_terms = self.parser.parse_query(c.fetchone()[0])
+        return (int(r[1]) for r in heapq.nlargest(K_sim, self.cos_sim_search(query_terms)))
+
     def bm25_search(self, query):
         pass
+
+def test():
+    m = Matrix()
+
+    def search(query):
+        conn = sqlite3.connect('books.db')
+        c = conn.cursor()
+        #for bid in m.tiered_search(query):
+        for bid in m.find_most_similar(query):
+            c.execute('SELECT title, author, summary FROM books WHERE bid = ?', (bid,))
+            title, author, summary = c.fetchone()
+            print(title, author, summary, '\n')
+        conn.close()
+
+    print('Start search')
+    while True:
+        query = input()
+        if query != '':
+            search(query)
+        else:
+            break
+
+if __name__ == '__main__':
+    test()
