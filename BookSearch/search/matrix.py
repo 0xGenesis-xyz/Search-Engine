@@ -219,13 +219,13 @@ class Matrix(object):
     def tf(self, freq):
         return 1 + np.log10(freq)
 
-    def idf(self, term, tier):
+    def idf(self, term, tier=0):
         matrix = self.mats_csr[tier]
         def df(term):
             row_num = self.term_to_row[term]
             row = matrix.getrow(row_num)
             return row.nnz
-        return np.log(self.N / df(term))
+        return np.log10(self.N / df(term))
 
     def make_query_vector(self, query_terms, tier):
         """Generator a query tf-idf vector according to terms counter.
@@ -233,7 +233,7 @@ class Matrix(object):
         q = sparse.dok_matrix((1, self.M))    # 1 * #term_num# vector
         # Build query tf-idf vector
         for term, freq in query_terms.items():
-            q[0,self.term_to_row[term]] = self.tf(freq) * idf(term, tier)
+            q[0,self.term_to_row[term]] = self.tf(freq) * self.idf(term, tier)
         q = normalize(q.tocsr(), axis=1, copy=False)
         return q
 
@@ -290,8 +290,8 @@ class Matrix(object):
         bids = (self.col_to_bid[col] for col in cols)
         return zip(cos_sims, bids)
 
-    """
     def find_most_similar(self, bid, K_sim=10):
+        """Return the bid of the most similar book to parameter bid except the given bid."""
         col_num = self.bid_to_col.get(str(bid))
         if col_num is None:
             return ()
@@ -305,11 +305,18 @@ class Matrix(object):
             np.logical_or(docs, row.toarray()[0], docs)
         cols = docs.nonzero()[0]
         matched_matrix = self.term_bid_matrix[:,cols]
-        cos_sims = termv.T.dot(matched_matrix).toarray()[0]
+        termv.data = self.tf(termv.data) * np.array([self.idf(self.row_to_term[row])
+                                                     for row in termv.indices])
+        termv = normalize(termv.T, axis=1, copy=False)
+        matched_matrix.data = self.tf(matched_matrix.data)
+        matched_matrix = normalize(matched_matrix.T, axis=1, copy=False).T
+        cos_sims = termv.dot(matched_matrix).toarray()[0]
         bids = (self.col_to_bid[col] for col in cols)
-        return (int(r[1]) for r in heapq.nlargest(K_sim, zip(cos_sims, bids)))
-    """
-    def find_most_similar(self, bid, K_sim=10):
+        return (int(r[1])
+                for r in heapq.nlargest(K_sim, zip(cos_sims, bids))
+                if bid != r[1])
+
+    def find_most_similar_tags(self, bid, K_sim=10):
         conn = sqlite3.connect('books.db')
         c = conn.cursor()
         c.execute('SELECT tags FROM books WHERE bid = ?', (int(bid),))
@@ -325,7 +332,8 @@ def test():
     def search(query):
         conn = sqlite3.connect('books.db')
         c = conn.cursor()
-        for bid in m.tiered_search(query):
+        #for bid in m.tiered_search(query):
+        for bid in m.find_most_similar(query):
             c.execute('SELECT title, author, summary FROM books WHERE bid = ?', (bid,))
             title, author, summary = c.fetchone()
             print(title, author, summary, '\n')
