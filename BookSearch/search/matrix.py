@@ -13,39 +13,40 @@ from numpy import linalg as LA
 from scipy import sparse
 from sklearn.preprocessing import normalize
 
+"""
+import sys
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
 from parser import Parser
 from crawler import Crawler
+"""
+from search.parser import Parser
+from search.crawler import Crawler
 
 class Matrix(object):
     k1, k2, b = 1.5, 1.5, 0.75    # Parameters
-    modified = {'dictionary': False, 'higher_tier_dictionary': False}    # Member vars modified mark
+    modified = {}    # Member vars modified mark
     def __init__(self):
         self.parser = Parser()
         self.bids = Crawler().finished_set
-
-        self.dictionary = None if os.path.exists('term_bid_matrix.pkl') else self.load_dictionary()
-        self.higher_tier_dictionary = None if os.path.exists('title_term_bid_matrix.pkl') else self.load_higher_tier_dictionary()
-
+        self.dictionary = self.load_dictionary()
+        self.higher_tier_dictionary = self.load_higher_tier_dictionary()
         self.term_to_row = self.load_term_to_row()
         self.bid_to_col = self.load_bid_to_col()
-
         self.N = len(self.bid_to_col)    # Total number of documents
         self.M = len(self.term_to_row)    # Total number of terms
-
-        self.col_to_bid = self.load_col_to_bid()
+        #self.row_to_term = {row: term for term, row in self.term_to_row.items()}
         self.row_to_term = self.load_row_to_term()    # Used in similar search
         self.term_bid_matrix = self.load_term_bid_matrix()
+        self.term_bid_matrix_csr = self.term_bid_matrix.tocsr()    # Used for slice term rows
         self.title_term_bid_matrix = self.load_title_term_bid_matrix()
-        # Csr sparse matrix sed for slice term rows
-        self.term_bid_matrix_csr = self.term_bid_matrix.tocsr()
-        self.title_term_bid_matrix_csr = self.title_term_bid_matrix.tocsr()
         self.stop_words = self.load_stop_words()
 
         # Tiers, tier[0] is the lowest tier
-        self.mats_csc = (self.term_bid_matrix,
-                         self.title_term_bid_matrix)
-        self.mats_csr = (self.term_bid_matrix_csr,
-                         self.title_term_bid_matrix_csr)
+        self.dicts = (self.dictionary,
+                      self.higher_tier_dictionary)
+        self.mats = (self.term_bid_matrix,
+                     self.title_term_bid_matrix)
 
     def __del__(self):
         self.save_dictionary()
@@ -55,8 +56,6 @@ class Matrix(object):
         self.save_term_bid_matrix()
         self.save_title_term_bid_matrix()
         self.save_row_to_term()
-        self.save_col_to_bid()
-        self.save_stop_words()
 
     def saving(func):
         @wraps(func)
@@ -144,11 +143,7 @@ class Matrix(object):
         return {row: term for term, row in self.term_to_row.items()}
 
     @loading
-    def load_col_to_bid(self):
-        return {col: bid for bid, col in self.bid_to_col.items()}
-
-    @loading
-    def load_stop_words(self, N=25000):
+    def load_stop_words(self, N=3000):
         """Return a boolean vector in which True entries stand for lower occurence words,
         while False entries stand for higher occurence words.
         N is the threshold values that how many stop words will be selected"""
@@ -206,26 +201,15 @@ class Matrix(object):
         with open('row_to_term.pkl', 'wb') as f:
             pickle.dump(self.row_to_term, f)
 
-    @saving
-    def save_col_to_bid(self):
-        with open('col_to_bid.pkl', 'wb') as f:
-            pickle.dump(self.col_to_bid, f)
-
-    @saving
-    def save_stop_words(self):
-        with open('stop_words.pkl', 'wb') as f:
-            pickle.dump(self.stop_words, f)
-
     def tf(self, freq):
         return 1 + np.log10(freq)
 
-    def idf(self, term, tier=0):
-        matrix = self.mats_csr[tier]
-        def df(term):
-            row_num = self.term_to_row[term]
-            row = matrix.getrow(row_num)
-            return row.nnz
-        return np.log10(self.N / df(term))
+    def idf(self, term, tier):
+        dictionary = self.dicts[tier]
+        if dictionary.get(term):
+            return np.log10(self.N / len(dictionary[term]))
+        else:
+            return 0
 
     def make_query_vector(self, query_terms, tier):
         """Generator a query tf-idf vector according to terms counter.
@@ -239,24 +223,20 @@ class Matrix(object):
 
     def boolean_search(self, query_terms, tier):
         """Search a query according to its ocurrence in the documents and return matched results.
-        When tier is 'l', search the lower tier, and if tier is 'h' search the higher tier.
-        Return the column indices of matched books."""
-        matrix = self.mats_csr[tier]
-        docs = np.zeros(self.N, dtype=bool)    # Get union of docs containing query
-        for term in query_terms:
-            row = self.term_to_row.get(term)
-            if row is None:
-                continue
-            else:
-                np.logical_or(docs, matrix.getrow(row).toarray()[0], docs)
-        return docs.nonzero()[0]
+        When tier is 'l', search the lower tier, and if tier is 'h' search the higher tier."""
+        dictionary = self.dicts[tier]
+        bids = reduce(set.union,
+                      (set(dictionary.get(term, []))
+                       for term in query_terms))
+        return bids
 
-    def make_matched_matrix(self, cols, tier):
-        matrix = self.mats_csc[tier]
+    def make_matched_matrix(self, bids, tier):
+        dictionary = self.dicts[tier]
+        matrix = self.mats[tier]
         # Pick matched columns
-        m = matrix[:,cols]
+        m = matrix[:,[self.bid_to_col[bid] for bid in bids]]
         m.data = self.tf(m.data)
-        m = normalize(m.T, axis=1, copy=False).T    # No copy to make faster
+        m = normalize(m.transpose(), axis=1, copy=False).transpose()    # No copy to make faster
         return m
 
     def tiered_search(self, query, K=10):
@@ -284,68 +264,10 @@ class Matrix(object):
         If qv is not provided, it will be computed.
         Default tier is 0"""
         qv = self.make_query_vector(query_terms, tier)
-        cols = self.boolean_search(query_terms, tier)
-        m = self.make_matched_matrix(cols, tier)
+        bids = self.boolean_search(query_terms, tier)
+        m = self.make_matched_matrix(bids, tier)
         cos_sims = qv.dot(m).toarray()[0]
-        bids = (self.col_to_bid[col] for col in cols)
         return zip(cos_sims, bids)
-
-    def find_most_similar(self, bid, K_sim=10):
-        """Return the bid of the most similar book to parameter bid except the given bid."""
-        col_num = self.bid_to_col.get(str(bid))
-        if col_num is None:
-            return ()
-        termv = self.term_bid_matrix.getcol(col_num)
-        termva = termv.toarray()    # Generate a vector for terms
-        stop_words_removed = np.logical_and(termva, self.stop_words)
-        nonzero = stop_words_removed.nonzero()[0]    # Nonzero indices
-        rest_term_rows = self.term_bid_matrix_csr[nonzero]
-        docs = np.zeros(self.N, dtype=bool)
-        for row in rest_term_rows:
-            np.logical_or(docs, row.toarray()[0], docs)
-        cols = docs.nonzero()[0]
-        matched_matrix = self.term_bid_matrix[:,cols]
-        termv.data = self.tf(termv.data) * np.array([self.idf(self.row_to_term[row])
-                                                     for row in termv.indices])
-        termv = normalize(termv.T, axis=1, copy=False)
-        matched_matrix.data = self.tf(matched_matrix.data)
-        matched_matrix = normalize(matched_matrix.T, axis=1, copy=False).T
-        cos_sims = termv.dot(matched_matrix).toarray()[0]
-        bids = (self.col_to_bid[col] for col in cols)
-        return (int(r[1])
-                for r in heapq.nlargest(K_sim, zip(cos_sims, bids))
-                if bid != r[1])
-
-    def find_most_similar_tags(self, bid, K_sim=10):
-        conn = sqlite3.connect('books.db')
-        c = conn.cursor()
-        c.execute('SELECT tags FROM books WHERE bid = ?', (int(bid),))
-        query_terms = self.parser.parse_query(c.fetchone()[0])
-        return (int(r[1]) for r in heapq.nlargest(K_sim, self.cos_sim_search(query_terms)))
 
     def bm25_search(self, query):
         pass
-
-def test():
-    m = Matrix()
-
-    def search(query):
-        conn = sqlite3.connect('books.db')
-        c = conn.cursor()
-        #for bid in m.tiered_search(query):
-        for bid in m.find_most_similar(query):
-            c.execute('SELECT title, author, summary FROM books WHERE bid = ?', (bid,))
-            title, author, summary = c.fetchone()
-            print(title, author, summary, '\n')
-        conn.close()
-
-    print('Start search')
-    while True:
-        query = input()
-        if query != '':
-            search(query)
-        else:
-            break
-
-if __name__ == '__main__':
-    test()

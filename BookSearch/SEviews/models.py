@@ -15,7 +15,7 @@ class Books(models.Model):
     pubdate = models.TextField(blank=True, null=True)#
     binding = models.TextField(blank=True, null=True)#
     summary = models.TextField(blank=True, null=True)
-    author_intro = models.TextField(blank=True, null=True)#×÷Õß¼ò½é
+    author_intro = models.TextField(blank=True, null=True)#Ã—Ã·Ã•ÃŸÂ¼Ã²Â½Ã©
     catalog = models.TextField(blank=True, null=True)# ?
     rating = models.FloatField(blank=True, null=True)# ?
     numraters = models.IntegerField(db_column='numRaters', blank=True, null=True)  # Field name made lowercase.

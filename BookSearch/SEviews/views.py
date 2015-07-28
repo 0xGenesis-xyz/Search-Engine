@@ -1,24 +1,23 @@
 from django.shortcuts import render
 from django.core.paginator import Paginator, InvalidPage, EmptyPage
-from SEviews.models import Books #µ¼ÈëÊı¾İ¿â¸ü¸ÄÕâÀï
+from SEviews.models import Books #å¯¼å…¥æ•°æ®åº“æ›´æ”¹è¿™é‡Œ
+from search.matrix import Matrix
 # Create your views here.
 
 from django.http import HttpResponse
 from django.shortcuts import render,render_to_response
 
-from search.matrix import Matrix
-
 m = Matrix()
 
-#×Ö·û´®º¯Êı´¦ÀíÖ÷º¯Êı
+#å­—ç¬¦ä¸²å‡½æ•°å¤„ç†ä¸»å‡½æ•°
 def SE_Result(wd):
     return list(m.tiered_search(wd))
 
-#»ñÈ¡ÊıÄ¿ÄÚÈİ
+#è·å–æ•°ç›®å†…å®¹
 def SE_Recom(bid):
     return list(m.find_most_similar(bid))
 
-#¶Ô¼ò½é³¤¶È½øĞĞ²Ã¼ô
+#å¯¹ç®€ä»‹é•¿åº¦è¿›è¡Œè£å‰ª
 def summary_cut(book_list):
     summary_len = 110
     for book in book_list:
@@ -27,7 +26,7 @@ def summary_cut(book_list):
         book.tags = book.tags.split(" ")
     #return book_list
 
-#¶ÔÍÆ¼öÊéÄ¿¹ı³¤±êÌâ½øĞĞ²Ã¼ô
+#å¯¹æ¨èä¹¦ç›®è¿‡é•¿æ ‡é¢˜è¿›è¡Œè£å‰ª
 def title_cut(book_list):
     title_len = 12
     for book in book_list:
@@ -35,41 +34,41 @@ def title_cut(book_list):
             book.title=book.title[:title_len-3]+"..."
     #return book_list
 
-#ÏìÓ¦ËÑË÷ÇëÇóÖ÷Òªº¯Êı
+#å“åº”æœç´¢è¯·æ±‚ä¸»è¦å‡½æ•°
 def result(request):
-    #ÍÆ¼öÊé±í
+    #æ¨èä¹¦è¡¨
     try:
-        wd = str(request.GET.get('wd','')) #²éÑ¯×Ö¶Î
-        page = int(request.GET.get('page','1')) #Ò³Âë½ÓÊÜ
+        wd = str(request.GET.get('wd','')) #æŸ¥è¯¢å­—æ®µ
+        page = int(request.GET.get('page','1')) #é¡µç æ¥å—
     except ValueError:
         page = 1
         wd = ''
-    #¿Õ°×²éÑ¯»ØÊ×Ò³
+    #ç©ºç™½æŸ¥è¯¢å›é¦–é¡µ
     if wd=='':
         return render(request,'index.html')
-    #½á¹ûËÑÑ°
+    #ç»“æœæœå¯»
     else:
-        posts_list = SE_Result(wd)                   #´¦ÀíÊı¾İ²¢·µ»ØÁĞ±í
+        posts_list = SE_Result(wd)                   #å¤„ç†æ•°æ®å¹¶è¿”å›åˆ—è¡¨
         first_res = posts_list[0]
-        recom_list = SE_Recom(first_res)                    #»ñÈ¡ÍÆ¼öÊé±í
-        page_size=6                                      #Ã¿Ò³ÏÔÊ¾ÌõÄ¿
-        paginator = Paginator(posts_list, page_size)     #Ò³ÂëÆ÷
+        recom_list = SE_Recom(first_res)                    #è·å–æ¨èä¹¦è¡¨
+        page_size=6                                      #æ¯é¡µæ˜¾ç¤ºæ¡ç›®
+        paginator = Paginator(posts_list, page_size)     #é¡µç å™¨
         try:
-            bids = paginator.page(page)                 #Ò³ÂëÑ¡Ôñ
+            bids = paginator.page(page)                 #é¡µç é€‰æ‹©
         except (EmptyPage, InvalidPage):
             bids = paginator.page(paginator.num_pages)
         posts = []
         recoms= []
         startPos = (page-1)*page_size
         endPos   = startPos + page_size
-        #¶ÁÈ¡ËÑË÷½á¹û
+        #è¯»å–æœç´¢ç»“æœ
         if posts_list:
             for id in posts_list:
                 book = Books.objects.filter(bid=id)
                 if len(book)>=1:
                     posts.append(book[0])
             none = 0
-        #¶ÁÈ¡ÍÆ¼öÊéÄ¿
+        #è¯»å–æ¨èä¹¦ç›®
         else:
             none = 1
         for re in recom_list:
@@ -78,11 +77,11 @@ def result(request):
                 recoms.append(book[0])
         title_cut(recoms)
         summary_cut(posts)
-        title = wd + " _SynJauNeng"                         #±êÌâ
+        title = wd + " _SynJauNeng"                         #æ ‡é¢˜
         return render_to_response( 'res.html',
         {'name':title,'wd':wd,'none':none,
          'posts':posts,'pages':bids,
-         'recoms':recoms,'pid':page})          #×Öµä´«µİ±äÁ¿
+         'recoms':recoms,'pid':page})          #å­—å…¸ä¼ é€’å˜é‡
 
 def index(request):
     return render(request, 'index.html')
